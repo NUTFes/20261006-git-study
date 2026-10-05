@@ -1,0 +1,23 @@
+name: Check workshop PR
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  validate-submission:
+    name: validate-submission
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the proposed changes
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Test the validator
+        run: python3 -m unittest discover -s tests -v
+      - name: Check the HTML and PR description
+        run: python3 scripts/validate.py
