@@ -20,4 +20,7 @@ jobs:
       - name: Test the validator
         run: python3 -m unittest discover -s tests -v
       - name: Check the HTML and PR description
+        # The maintainer uses docs/* branches for curriculum changes. Learners
+        # still receive the full submission check on their workshop PRs.
+        if: ${{ github.event.pull_request.user.login != 'hengin-eer' || !startsWith(github.head_ref, 'docs/') }}
         run: python3 scripts/validate.py
