@@ -1,10 +1,17 @@
 import unittest
-from pathlib import Path
 
 from scripts.validate import validate_html, validate_pr_body
 
 
-TEMPLATE = Path("index.html").read_text(encoding="utf-8")
+TEMPLATE = """<!doctype html>
+<html lang="ja">
+  <head><title>CHANGE_ME_TITLE</title></head>
+  <body>
+    <h1 id="workshop-heading">CHANGE_ME_HEADING</h1>
+    <p id="workshop-message">CHANGE_ME_MESSAGE</p>
+  </body>
+</html>
+"""
 VALID_HTML = (
     TEMPLATE.replace("CHANGE_ME_TITLE", "私のページ")
     .replace("CHANGE_ME_HEADING", "こんにちは")
