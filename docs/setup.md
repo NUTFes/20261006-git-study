@@ -57,4 +57,4 @@ git config --global user.email
 - `git config --global user.name`と`git config --global user.email`に自分の設定が表示される。Gitの名前はGitHub IDと同じでなくても構いません。
 - GitHubにログインでき、教材リポジトリを開ける。招待が来ていれば承諾済み。
 
-メールアドレスを公開したくない場合は、[GitHubのメール設定](https://docs.github.com/en/account-and-profile/how-tos/email-preferences/setting-your-commit-email-address)にある`noreply`アドレスを使えます。作業を始めるコマンドは[README](../README.md#今日の進め方)にあります。
+メールアドレスを公開したくない場合は、[GitHubのメール設定](https://docs.github.com/en/account-and-profile/how-tos/email-preferences/setting-your-commit-email-address)にある`noreply`アドレスを使えます。作業を始めるコマンドは[README](../README.md#1-リポジトリを手元に用意する)にあります。
