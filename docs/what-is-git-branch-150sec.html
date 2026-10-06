@@ -1,0 +1,1408 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>git のブランチと push / pull / PR（約2分半）</title>
+<style>
+  :root {
+    --page: #dcd9d0;
+    --ink: #2b2b2b;
+    --sub: #6a665d;
+    --btn: #fbfbf6;
+    --btn-border: #b9b4a7;
+    --track: #c9c5ba;
+    --fill: #2f6fd6;
+    --focus: #ef8a1f;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --page: #1f2022; --ink: #ecebe6; --sub: #a9a59c; --btn: #2c2d30;
+      --btn-border: #4b4c51; --track: #3a3b3f; --fill: #6f9ff0; --focus: #f5a54f;
+    }
+  }
+  :root[data-theme="dark"] {
+    --page: #1f2022; --ink: #ecebe6; --sub: #a9a59c; --btn: #2c2d30;
+    --btn-border: #4b4c51; --track: #3a3b3f; --fill: #6f9ff0; --focus: #f5a54f;
+  }
+  *, *::before, *::after { box-sizing: inherit; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--page);
+    color: var(--ink);
+    font-family: "Hiragino Maru Gothic ProN", "BIZ UDPGothic", "Yu Gothic UI", "Meiryo", system-ui, sans-serif;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .wrap {
+    width: min(calc(100vw - 24px), calc((100vh - 120px) * 16 / 9));
+    max-width: 100%;
+  }
+  @supports (height: 100dvh) {
+    .wrap { width: min(calc(100vw - 24px), calc((100dvh - 120px) * 16 / 9)); }
+  }
+  canvas {
+    display: block; width: 100%; height: auto; aspect-ratio: 16 / 9;
+    border-radius: 6px;
+    box-shadow: 0 0 0 6px #c4c1b8, 0 0 0 7px #a9a59b, 0 10px 28px rgba(0,0,0,.22);
+    background: #fbfbf6;
+  }
+  .controls {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+    margin-top: 16px;
+  }
+  button {
+    font: inherit; font-size: 15px; color: var(--ink);
+    background: var(--btn); border: 1.5px solid var(--btn-border);
+    border-radius: 8px; padding: 7px 12px; cursor: pointer; min-height: 38px;
+  }
+  button:hover { border-color: var(--ink); }
+  button:focus-visible, input:focus-visible, .seg:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  #play { min-width: 104px; font-weight: bold; }
+  .bar { display: flex; gap: 3px; flex: 1 1 240px; min-width: 200px; }
+  .seg {
+    position: relative; height: 30px; background: var(--track);
+    border-radius: 5px; overflow: hidden; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .seg .fill { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--fill); opacity: .9; }
+  .seg span { position: relative; font-size: 13px; font-weight: bold; color: var(--ink); mix-blend-mode: normal; }
+  .seg.part2 { margin-left: 8px; }
+  .seg.now { box-shadow: inset 0 0 0 2px var(--ink); }
+  #time { font-variant-numeric: tabular-nums; font-size: 14px; color: var(--sub); min-width: 92px; text-align: right; }
+  .chk { font-size: 14px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+  .chk input { width: 18px; height: 18px; }
+  .speed { font-size: 14px; display: inline-flex; align-items: center; gap: 6px; }
+  select {
+    font: inherit; font-size: 14px; color: var(--ink); background: var(--btn);
+    border: 1.5px solid var(--btn-border); border-radius: 8px; padding: 6px 8px; min-height: 38px; cursor: pointer;
+  }
+  select:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .hint { font-size: 13px; color: var(--sub); margin: 8px 2px 0; }
+  @media (max-width: 640px) {
+    button { padding: 6px 9px; font-size: 14px; }
+    #time { min-width: 0; }
+  }
+</style>
+</head>
+<body>
+<main class="wrap" id="wrap">
+  <canvas id="board" role="img" aria-label="git のブランチの仕組みを説明するホワイトボード風アニメーション"></canvas>
+  <div class="controls">
+    <button id="prev" title="前のシーン（←）">⏮ 前へ</button>
+    <button id="play" title="再生 / 一時停止（Space）">▶ 再生</button>
+    <button id="next" title="次のシーン（→）">次へ ⏭</button>
+    <div class="bar" id="bar" aria-label="シーン一覧"></div>
+    <span id="time">0:00 / 2:28</span>
+    <label class="speed">速度
+      <select id="speed">
+        <option value="0.5">0.5×</option>
+        <option value="0.75">0.75×</option>
+        <option value="1" selected>1×</option>
+        <option value="1.25">1.25×</option>
+        <option value="1.5">1.5×</option>
+        <option value="2">2×</option>
+      </select>
+    </label>
+    <label class="chk"><input type="checkbox" id="auto" checked> シーンの終わりで止める</label>
+    <button id="fs" title="全画面">⛶ 全画面</button>
+  </div>
+  <p class="hint">Space：再生 / 一時停止　← →：シーン移動　↑ ↓：速度　バーをクリックでそのシーンへ</p>
+</main>
+
+<script>
+(() => {
+  "use strict";
+  const W = 1280, H = 720;
+  const cv = document.getElementById("board");
+  const ctx = cv.getContext("2d");
+  // Canvas はビットマップなので、実際の表示サイズ × 画素密度に合わせて
+  // 内部解像度を作り直す（全画面やプロジェクタでもぼやけないように）
+  let RES = 1;
+
+  const COL = {
+    main: "#2f6fd6", mainL: "#dbe8ff", mainD: "#1d4a99",
+    feat: "#ef8a1f", featL: "#ffe2c2", featD: "#a85500",
+    ink: "#2b2b2b", sub: "#6d6a63", red: "#d6453d", board: "#fbfbf6", paper: "#fffef9",
+    pr: "#8250df", prL: "#efe6ff", ok: "#1f883d", okL: "#dcf5e3"
+  };
+  const HAND = '"Klee","Klee One","Hiragino Maru Gothic ProN","Hiragino Maru Gothic Pro","BIZ UDPGothic","Yu Gothic UI","Yu Gothic","Meiryo","Comic Sans MS",sans-serif';
+  const CODE = '"Comic Sans MS","Chalkboard SE","Segoe Print","Klee",cursive,monospace';
+
+  // ---------- シーン定義 ----------
+  const SCENES = [
+    { start: 0,    end: 6,    title: "コミットを積む",       cap: "コミット＝変更（差分）を記録した点。HEAD（今いる場所）は main を指す" },
+    { start: 6,    end: 12,   title: "ブランチを作る",       cap: "ブランチはコミットに貼る付箋。作っても中身はコピーされない" },
+    { start: 12,   end: 17,   title: "ブランチを切り替える", cap: "switch は HEAD の付け替え。作業場所が feature に移る" },
+    { start: 17,   end: 23,   title: "feature で作業する",   cap: "コミットすると、HEAD が指している付箋だけが前に進む" },
+    { start: 23,   end: 29.5, title: "main でも作業が進む",  cap: "main に戻るとファイルも main の状態に戻る。そこでコミットすると履歴が2本に" },
+    { start: 29.5, end: 35,   title: "マージする",           cap: "merge で2本が合流。D・E の変更も取り込まれ、親を2つ持つコミットができる" },
+    { start: 35,   end: 45,   title: "ブランチを消す",       cap: "消えるのは付箋（名前）だけ。コミット＝履歴はそのまま残る" },
+    // ---- 第2部：チームで共有する ----
+    { start: 45,   end: 60,   title: "リモートとローカル",   cap: "GitHub 上の共有リポジトリ＝リモート。clone で手元に丸ごとコピーする" },
+    { start: 60,   end: 74,   title: "ローカルで作業する",   cap: "feature を作ってコミット。でもこの時点では、変更は自分の PC の中だけ" },
+    { start: 74,   end: 88,   title: "push で送る",          cap: "push ＝ ローカルのコミットをリモートへ送る。これでチームのみんなにも見える" },
+    { start: 88,   end: 103,  title: "プルリクエスト（PR）", cap: "PR ＝「feature を main に取り込んで」というお願い。差分をレビューしてもらう" },
+    { start: 103,  end: 116,  title: "PR をマージする",      cap: "レビューが通ったら GitHub 上でマージ。進むのはリモートの main だけ" },
+    { start: 116,  end: 131,  title: "pull で取り込む",      cap: "pull ＝ リモートの変更を手元に取り込む。これで自分の main も最新になる" },
+    { start: 131,  end: 148,  title: "まとめ：チーム開発の流れ", cap: "ブランチで作業 → push → PR → マージ → pull。これをくり返すのがチーム開発の基本" }
+  ];
+  const TOTAL = 148;
+  const NUM = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭";
+  const TYPE_SPEED = 22; // 文字/秒
+
+  const CMDS = [
+    [[0.3, "git commit"], [2.0, "git commit"], [3.6, "git commit"]],
+    [[6.4, "git branch feature"]],
+    [[12.4, "git switch feature", "Switched to branch 'feature'"]],
+    [[17.4, "git commit"], [19.6, "git commit"]],
+    [[23.4, "git switch main"], [25.6, "git commit"]],
+    [[30.0, "git merge feature", "Merge made by the 'ort' strategy."]],
+    [[35.4, "git branch -d feature", "Deleted branch feature (was E)."]],
+    // 第2部  [開始, コマンド, 出力, 代わりに出す注記]
+    [[50.3, "git clone https://github.com/team/site", "Cloning into 'site'..."]],
+    [[60.4, "git switch -c feature"], [63.4, "git commit"], [65.4, "git commit"]],
+    [[74.4, "git push origin feature", "* [new branch] feature -> feature"]],
+    [[88.5, "", null, "（GitHub の画面で「Create pull request」を押す）"]],
+    [[103.5, "", null, "（GitHub の画面で「Merge pull request」を押す）"]],
+    [[116.4, "git switch main"], [118.6, "git pull", "Fast-forward"]],
+    [[131.5, "", null, "流れ：switch -c → commit → push → PR → マージ → pull"]]
+  ];
+
+  const P = { A: [90, 420], B: [190, 420], C: [290, 420], D: [410, 260], E: [520, 260], F: [470, 420], G: [660, 420] };
+  const COMMITS = [
+    { id: "A", br: "main", t: 0.85 }, { id: "B", br: "main", t: 2.9 }, { id: "C", br: "main", t: 4.5 },
+    { id: "D", br: "feat", t: 18.5 }, { id: "E", br: "feat", t: 20.7 },
+    { id: "F", br: "main", t: 26.7 }, { id: "G", br: "main", t: 31.9, merge: true }
+  ];
+  const EDGES = [
+    { a: "A", b: "B", br: "main", t0: 2.5, t1: 2.9 },
+    { a: "B", b: "C", br: "main", t0: 4.1, t1: 4.5 },
+    { a: "C", b: "D", br: "feat", t0: 18.0, t1: 18.5 },
+    { a: "D", b: "E", br: "feat", t0: 20.2, t1: 20.7 },
+    { a: "C", b: "F", br: "main", t0: 26.2, t1: 26.7 },
+    { a: "F", b: "G", br: "main", t0: 31.0, t1: 31.9 },
+    { a: "E", b: "G", br: "feat", t0: 31.0, t1: 31.9 }
+  ];
+  const NOTEKF = {
+    main: [[1.1, "A"], [3.0, "B"], [4.6, "C"], [26.8, "F"], [32.0, "G"]],
+    feat: [[7.5, "C"], [18.6, "D"], [20.8, "E"]]
+  };
+
+  // ---------- 右パネル：作業中のファイル ----------
+  // [その行を追加したコミット, 表示する文字列]
+  const CODE_LINES = [
+    ["A", "<!DOCTYPE html>"],
+    ["A", "<html lang=\"ja\">"],
+    ["A", "<head>"],
+    ["A", "  <meta charset=\"UTF-8\">"],
+    ["A", "  <title>簡単なページ</title>"],
+    ["A", "</head>"],
+    ["A", "<body>"],
+    ["B", "  <h1>こんにちは！</h1>"],
+    ["C", "  <p>これは最初のWebページです。</p>"],
+    ["D", "  <p>私の名前はfeatureです。</p>"],
+    ["E", "  <p>gitを勉強しています。</p>"],
+    ["F", "  <p>私の名前はmainです。</p>"],
+    ["A", "</body>"],
+    ["A", "</html>"]
+  ];
+  // 各コミットの行が「作業中のファイル」に存在する時間帯
+  // D・E は HEAD が main に移った瞬間（24.7秒〜）に消え、マージ（31.9秒〜）で戻ってくる
+  const SHOW = {
+    A: [[0.85, Infinity]], B: [[2.9, Infinity]], C: [[4.5, Infinity]],
+    D: [[18.5, 24.7], [31.9, Infinity]], E: [[20.7, 24.7], [31.9, Infinity]],
+    F: [[26.7, Infinity]]
+  };
+  const FEAT_COMMITS = new Set(["D", "E"]);
+  // パネル下部のひとこと [開始時刻, 文, 差分かどうか]
+  const DIFF_LABELS = [
+    [0.85, "コミット A：+9行", true],
+    [2.9,  "コミット B：+1行", true],
+    [4.5,  "コミット C：+1行", true],
+    [6.0,  "ファイルは変わらない（付箋を貼っただけ）", false],
+    [12.0, "ファイルは変わらない（同じ C だから）", false],
+    [18.5, "コミット D：+1行", true],
+    [20.7, "コミット E：+1行", true],
+    [24.7, "main に戻ると D・E の行が消える", false],
+    [26.7, "コミット F：+1行", true],
+    [31.9, "マージで D・E の行が戻ってくる", true],
+    [35.0, "ファイルは変わらない", false]
+  ];
+
+  // ---------- 数学ユーティリティ ----------
+  const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+  const lerp = (a, b, k) => a + (b - a) * k;
+  const easeInOut = k => (k = clamp(k), k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2);
+  const easeOut = k => (k = clamp(k), 1 - Math.pow(1 - k, 3));
+  const easeOutBack = k => { k = clamp(k); const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(k - 1, 3) + c1 * Math.pow(k - 1, 2); };
+  function rnd(i) { const s = Math.sin(i * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); }
+  function noise(x) { const i = Math.floor(x), f = x - i, u = f * f * (3 - 2 * f); return (rnd(i) * (1 - u) + rnd(i + 1) * u) * 2 - 1; }
+  let BOIL = 0; // 手描きの「揺れ」用。時間から決まるので一時停止中は静止する
+
+  function bezierPts(p0, p3, n = 32) {
+    const dx = (p3[0] - p0[0]) * 0.5;
+    const p1 = [p0[0] + dx, p0[1]], p2 = [p3[0] - dx, p3[1]];
+    const out = [];
+    for (let i = 0; i <= n; i++) {
+      const s = i / n, m = 1 - s;
+      out.push([
+        m * m * m * p0[0] + 3 * m * m * s * p1[0] + 3 * m * s * s * p2[0] + s * s * s * p3[0],
+        m * m * m * p0[1] + 3 * m * m * s * p1[1] + 3 * m * s * s * p2[1] + s * s * s * p3[1]
+      ]);
+    }
+    return out;
+  }
+  function densify(pts, step) {
+    const out = [[pts[0][0], pts[0][1], 0]];
+    let acc = 0;
+    for (let i = 1; i < pts.length; i++) {
+      const [ax, ay] = pts[i - 1], [bx, by] = pts[i];
+      const d = Math.hypot(bx - ax, by - ay);
+      if (d === 0) continue;
+      const n = Math.max(1, Math.ceil(d / step));
+      for (let k = 1; k <= n; k++) { const s = k / n; out.push([ax + (bx - ax) * s, ay + (by - ay) * s, acc + d * s]); }
+      acc += d;
+    }
+    return out;
+  }
+
+  // ---------- 手描きプリミティブ ----------
+  function strokeWobble(pts, o = {}) {
+    const d = densify(pts, o.step || 5);
+    if (d.length < 2) return;
+    const L = d[d.length - 1][2];
+    const lim = (o.progress ?? 1) * L;
+    if (lim <= 0.5) return;
+    const base = ctx.globalAlpha;
+    const passes = o.passes ?? 2;
+    for (let p = 0; p < passes; p++) {
+      const seed = (o.seed || 0) + p * 31.7 + BOIL * 7.13;
+      const amp = (o.amp ?? 1.6) * (p ? 1.4 : 1);
+      ctx.beginPath();
+      for (let i = 0; i < d.length; i++) {
+        let [x, y, s] = d[i];
+        if (s > lim) {
+          const [px, py, ps] = d[i - 1];
+          const f = (lim - ps) / (s - ps);
+          x = px + (x - px) * f; y = py + (y - py) * f; s = lim;
+        }
+        const j = Math.max(0, i - 1), k = Math.min(d.length - 1, i + 1);
+        let nx = -(d[k][1] - d[j][1]), ny = d[k][0] - d[j][0];
+        const nl = Math.hypot(nx, ny) || 1; nx /= nl; ny /= nl;
+        const off = noise(s * (o.freq ?? 0.03) + seed) * amp;
+        if (i === 0) ctx.moveTo(x + nx * off, y + ny * off); else ctx.lineTo(x + nx * off, y + ny * off);
+        if (s >= lim) break;
+      }
+      ctx.strokeStyle = o.color || COL.ink;
+      ctx.lineWidth = (o.width || 3) * (p ? 0.55 : 1);
+      ctx.globalAlpha = base * (o.alpha ?? 1) * (p ? 0.45 : 1);
+      ctx.lineCap = "round"; ctx.lineJoin = "round";
+      if (o.dash) ctx.setLineDash(o.dash);
+      ctx.stroke();
+      if (o.dash) ctx.setLineDash([]);
+    }
+    ctx.globalAlpha = base;
+  }
+  function fillPoly(pts, color) {
+    ctx.beginPath();
+    pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+    ctx.closePath(); ctx.fillStyle = color; ctx.fill();
+  }
+  function circlePts(cx, cy, r, seed, amp = 1.4, over = 0.35) {
+    const pts = [], a0 = rnd(seed) * Math.PI * 2, n = 48, tot = Math.PI * 2 + over;
+    for (let i = 0; i <= n; i++) {
+      const a = a0 + tot * i / n;
+      const rr = r + noise(i * 0.35 + seed + BOIL * 3.1) * amp;
+      pts.push([cx + Math.cos(a) * rr, cy + Math.sin(a) * rr]);
+    }
+    return pts;
+  }
+  function rectCorners(w, h, seed) {
+    const j = i => noise(i * 1.7 + seed) * 1.6;
+    return [[-w / 2 + j(1), -h / 2 + j(2)], [w / 2 + j(3), -h / 2 + j(4)], [w / 2 + j(5), h / 2 + j(6)], [-w / 2 + j(7), h / 2 + j(8)]];
+  }
+  function rectOutline(c) {
+    return [c[0], c[1], c[2], c[3], c[0], [lerp(c[0][0], c[1][0], 0.1), lerp(c[0][1], c[1][1], 0.1) - 1.5]];
+  }
+  function drawArrow(x1, y1, x2, y2, o = {}) {
+    strokeWobble([[x1, y1], [x2, y2]], o);
+    const a = Math.atan2(y2 - y1, x2 - x1), hl = o.head || 14;
+    const k = o.progress ?? 1;
+    if (k < 1) return;
+    strokeWobble([[x2 - Math.cos(a - 0.5) * hl, y2 - Math.sin(a - 0.5) * hl], [x2, y2], [x2 - Math.cos(a + 0.5) * hl, y2 - Math.sin(a + 0.5) * hl]],
+      { ...o, seed: (o.seed || 0) + 9, step: 3 });
+  }
+  function setFont(size, font, weight) { ctx.font = `${weight || "normal"} ${size}px ${font || HAND}`; }
+  function textWidth(str, size, font, weight) {
+    setFont(size, font, weight);
+    let w = 0; for (const ch of str) w += ctx.measureText(ch).width; return w;
+  }
+  // 1文字ずつ少し傾け・上下させて描く（手書き風）
+  function handText(str, x, y, o = {}) {
+    const size = o.size || 24;
+    ctx.save();
+    setFont(size, o.font, o.weight);
+    ctx.fillStyle = o.color || COL.ink;
+    ctx.textBaseline = "alphabetic";
+    const chars = [...str], widths = chars.map(c => ctx.measureText(c).width);
+    const w = widths.reduce((a, b) => a + b, 0);
+    let cx = o.align === "center" ? x - w / 2 : o.align === "right" ? x - w : x;
+    const seed = (o.seed || 0) + BOIL * 1.7, jit = o.jit ?? 1;
+    chars.forEach((ch, i) => {
+      ctx.save();
+      ctx.translate(cx + widths[i] / 2, y + noise(i * 0.9 + seed) * size * 0.035 * jit);
+      ctx.rotate(noise(i * 1.3 + seed + 5) * 0.045 * jit);
+      ctx.fillText(ch, -widths[i] / 2, 0);
+      ctx.restore();
+      cx += widths[i];
+    });
+    ctx.restore();
+    return w;
+  }
+
+  // ---------- 背景（ホワイトボード）を一度だけ描いておく ----------
+  const bg = document.createElement("canvas");
+  function buildBackground() {
+    bg.width = Math.round(W * RES); bg.height = Math.round(H * RES);
+    const b = bg.getContext("2d");
+    b.setTransform(RES, 0, 0, RES, 0, 0);
+    b.fillStyle = COL.board; b.fillRect(0, 0, W, H);
+    for (let i = 0; i < 16; i++) {
+      const x = rnd(i * 3 + 1) * W, y = rnd(i * 3 + 2) * H, r = 80 + rnd(i * 3 + 3) * 220;
+      const g = b.createRadialGradient(x, y, 0, x, y, r);
+      g.addColorStop(0, "rgba(120,120,110,0.04)"); g.addColorStop(1, "rgba(120,120,110,0)");
+      b.fillStyle = g; b.fillRect(x - r, y - r, 2 * r, 2 * r);
+    }
+    // 消し跡
+    b.lineCap = "round";
+    for (let i = 0; i < 5; i++) {
+      const x = 100 + rnd(i + 40) * 1000, y = 160 + rnd(i + 50) * 380;
+      b.strokeStyle = "rgba(140,140,130,0.035)"; b.lineWidth = 40 + rnd(i + 60) * 30;
+      b.beginPath(); b.moveTo(x, y);
+      b.quadraticCurveTo(x + 120, y - 30 + rnd(i + 70) * 60, x + 220 + rnd(i + 80) * 160, y + 10);
+      b.stroke();
+    }
+    const vg = b.createRadialGradient(W / 2, H / 2, H * 0.45, W / 2, H / 2, H * 1.0);
+    vg.addColorStop(0, "rgba(0,0,0,0)"); vg.addColorStop(1, "rgba(0,0,0,0.06)");
+    b.fillStyle = vg; b.fillRect(0, 0, W, H);
+  }
+
+  // ---------- 状態の計算 ----------
+  function sceneIndex(t) {
+    let i = 0;
+    for (let k = 0; k < SCENES.length; k++) if (t >= SCENES[k].start) i = k;
+    return i;
+  }
+  function notePos(br, t) {
+    const kf = NOTEKF[br];
+    if (t < kf[0][0]) return null;
+    let i = 0;
+    while (i + 1 < kf.length && t >= kf[i + 1][0]) i++;
+    let [x, y] = P[kf[i][1]];
+    const d = t - kf[i][0];
+    if (i > 0 && d < 0.5) {
+      const k = easeInOut(d / 0.5), [px, py] = P[kf[i - 1][1]];
+      x = lerp(px, x, k); y = lerp(py, y, k);
+    }
+    const off = br === "main" ? 80 : -82;
+    return { x, y: y + off, cx: x, cy: y };
+  }
+  function headK(t) { // 0 = main を指す, 1 = feature を指す
+    if (t < 13.5) return 0;
+    if (t < 14.4) return easeInOut((t - 13.5) / 0.9);
+    if (t < 24.3) return 1;
+    if (t < 25.1) return 1 - easeInOut((t - 24.3) / 0.8);
+    return 0;
+  }
+
+  // ---------- 描画パーツ ----------
+  function drawHeader(t, si) {
+    const S = SCENES[si];
+    const title = `${NUM[si]} ${S.title}`;
+    const tw = textWidth(title, 38, HAND, "bold");
+    strokeWobble([[58, 66], [62 + tw, 63]], { color: "#ffe36b", width: 16, alpha: 0.75, passes: 1, amp: 1.2, seed: 3 });
+    handText(title, 60, 72, { size: 38, weight: "bold", seed: si * 11 });
+    const a = clamp((t - S.start) / 0.4);
+    ctx.save(); ctx.globalAlpha = a;
+    handText(S.cap, 62, 122, { size: 26, color: "#47443d", seed: si * 7 + 2, jit: 0.7 });
+    ctx.restore();
+    // 凡例
+    let x = 1222;
+    const items = [["feature", COL.feat], ["main", COL.main]];
+    items.forEach(([name, c], i) => {
+      const w = textWidth(name, 20, CODE);
+      handText(name, x, 66, { size: 20, color: COL.sub, font: CODE, align: "right", seed: 40 + i });
+      x -= w + 22;
+      ctx.save(); ctx.translate(x + 10, 59);
+      fillPoly(circlePts(0, 0, 8, 90 + i, 0.6, 0), c);
+      ctx.restore();
+      x -= 28;
+    });
+  }
+
+  function drawEdge(e, t) {
+    const k = clamp((t - e.t0) / (e.t1 - e.t0));
+    if (k <= 0) return;
+    strokeWobble(bezierPts(P[e.a], P[e.b]), {
+      color: e.br === "main" ? COL.main : COL.feat, width: 5.5, progress: easeInOut(k), seed: e.t0 * 3, amp: 1.5
+    });
+  }
+
+  function drawCommit(c, t) {
+    const k = clamp((t - c.t) / 0.45);
+    if (k <= 0) return;
+    const [x, y] = P[c.id];
+    commitAt(x, y, c.id, c.br, c.merge, easeOutBack(k));
+  }
+  // コミットの丸を (x, y) に倍率 s で描く
+  function commitAt(x, y, id, br, merge, s, alpha = 1) {
+    const c = { id, merge };
+    const col = br === "main" ? COL.main : COL.feat;
+    const light = br === "main" ? COL.mainL : COL.featL;
+    const dark = br === "main" ? COL.mainD : COL.featD;
+    const seed = id.charCodeAt(0) * 3.3;
+    ctx.save();
+    ctx.globalAlpha *= alpha;
+    ctx.translate(x, y); ctx.scale(s, s);
+    fillPoly(circlePts(0, 0, 25, seed, 1.0, 0), COL.paper);
+    fillPoly(circlePts(0, 0, 22, seed + 1, 1.0, 0), light);
+    strokeWobble(circlePts(0, 0, 25, seed, 1.2, 0.45), { color: col, width: 4.5, amp: 0.6, seed });
+    if (c.merge) {
+      strokeWobble(circlePts(0, 0, 16, seed + 5, 0.8, 0.4), { color: col, width: 3.2, amp: 0.5, seed: seed + 5 });
+      handText(c.id, 0, 7, { size: 18, color: dark, align: "center", font: CODE, weight: "bold", seed });
+    } else {
+      handText(c.id, 0, 8, { size: 22, color: dark, align: "center", font: CODE, weight: "bold", seed });
+    }
+    ctx.restore();
+  }
+
+  function drawNote(x, y, label, br, o = {}) {
+    const col = br === "main" ? COL.main : COL.feat;
+    const light = br === "main" ? COL.mainL : COL.featL;
+    const dark = br === "main" ? COL.mainD : COL.featD;
+    const seed = br === "main" ? 11 : 23;
+    ctx.save();
+    ctx.globalAlpha *= o.alpha ?? 1;
+    ctx.translate(x, y);
+    ctx.rotate(o.rot || 0);
+    const s = o.scale ?? 1; ctx.scale(s, s);
+    const w = 108, h = 44;
+    const c = rectCorners(w, h, seed);
+    fillPoly(c.map(([a, b]) => [a + 3, b + 4]), "rgba(0,0,0,0.08)");
+    fillPoly(c, light);
+    strokeWobble(rectOutline(c), { color: col, width: 2.4, amp: 0.7, seed });
+    // マスキングテープ
+    ctx.save(); ctx.rotate(-0.08);
+    fillPoly([[-20, -h / 2 - 7], [20, -h / 2 - 9], [21, -h / 2 + 6], [-19, -h / 2 + 8]], "rgba(255,255,255,0.65)");
+    strokeWobble([[-20, -h / 2 - 7], [20, -h / 2 - 9], [21, -h / 2 + 6], [-19, -h / 2 + 8], [-20, -h / 2 - 7]],
+      { color: "rgba(150,145,130,0.6)", width: 1, amp: 0.4, passes: 1, seed: seed + 3 });
+    ctx.restore();
+    handText(label, 0, 9, { size: 24, color: dark, align: "center", font: CODE, weight: "bold", seed: seed + 1 });
+    ctx.restore();
+  }
+
+  function drawNotes(t) {
+    // main
+    const m = notePos("main", t);
+    if (m) {
+      const k = easeOutBack(clamp((t - NOTEKF.main[0][0]) / 0.4));
+      ctx.save(); ctx.globalAlpha = clamp(k);
+      drawArrow(m.x, m.y - 24, m.cx, m.cy + 29, { color: COL.main, width: 2.4, head: 9, amp: 0.8, seed: 5 });
+      ctx.restore();
+      drawNote(m.x, m.y, "main", "main", { rot: -0.04, scale: k, alpha: clamp(k) });
+    }
+    // feature
+    const f = notePos("feat", t);
+    if (f) {
+      const drop = clamp((t - NOTEKF.feat[0][0]) / 0.5);
+      const peel = clamp((t - 36.6) / 1.4);
+      if (peel < 1) {
+        const lineA = clamp(drop * 2 - 1) * (1 - clamp(peel * 4));
+        if (lineA > 0) {
+          ctx.save(); ctx.globalAlpha = lineA;
+          drawArrow(f.x, f.y + 24, f.cx, f.cy - 29, { color: COL.feat, width: 2.4, head: 9, amp: 0.8, seed: 8 });
+          ctx.restore();
+        }
+        const dy = -(1 - easeOut(drop)) * 60 + 300 * peel * peel;
+        const lift = clamp(peel / 0.2);
+        drawNote(f.x + 50 * peel, f.y + dy - lift * 6, "feature", "feat", {
+          rot: 0.05 + peel * 1.15, alpha: drop * (1 - peel * peel), scale: 1 + lift * 0.06 * (1 - peel)
+        });
+      }
+    }
+  }
+
+  function drawHead(t) {
+    if (t < 1.4) return;
+    const a = clamp((t - 1.4) / 0.4);
+    const m = notePos("main", t), f = notePos("feat", t);
+    const k = headK(t);
+    let x, y;
+    if (k <= 0 || !f) { x = m.x; y = m.y; }
+    else if (k >= 1) { x = f.x; y = f.y; }
+    else { x = lerp(m.x, f.x, k) + Math.sin(Math.PI * k) * 60; y = lerp(m.y, f.y, k); }
+    headAt(x + (1 - easeOut(a)) * 30, y, 1, a);
+  }
+  function headAt(x, y, s, a) {
+    ctx.save();
+    ctx.globalAlpha *= a;
+    ctx.translate(x, y); ctx.scale(s, s);
+    drawArrow(122, 0, 62, 0, { color: COL.ink, width: 3.8, head: 15, amp: 1.2, seed: 77 });
+    handText("HEAD", 168, 10, { size: 29, font: CODE, weight: "bold", align: "center", seed: 61 });
+    ctx.restore();
+  }
+
+  function drawBubble(cx, cy, rx, ry, tip, text, t0, t, o = {}) {
+    const k = clamp((t - t0) / 0.35);
+    if (k <= 0) return;
+    const s = easeOutBack(k);
+    ctx.save();
+    ctx.translate(cx, cy); ctx.scale(s, s); ctx.translate(-cx, -cy);
+    const ang = Math.atan2((tip[1] - cy) / ry, (tip[0] - cx) / rx);
+    const a1 = ang - 0.24, a2 = ang + 0.24;
+    const ep = (a, f) => [cx + Math.cos(a) * rx * f, cy + Math.sin(a) * ry * f];
+    const ell = [];
+    const n = 64, a0 = 0.3;
+    for (let i = 0; i <= n + 4; i++) {
+      const a = a0 + Math.PI * 2 * i / n;
+      const f = 1 + noise(i * 0.4 + BOIL * 2.3 + 17) * 0.015;
+      ell.push(ep(a, f));
+    }
+    fillPoly(ell.slice(0, n), COL.paper);
+    strokeWobble(ell, { color: COL.ink, width: 2.6, amp: 0.6, seed: 31 });
+    fillPoly([ep(a1 - 0.06, 0.82), ep(a1, 1), tip, ep(a2, 1), ep(a2 + 0.06, 0.82)], COL.paper);
+    strokeWobble([ep(a1, 1), tip], { color: COL.ink, width: 2.6, amp: 0.6, seed: 32 });
+    strokeWobble([tip, ep(a2, 1)], { color: COL.ink, width: 2.6, amp: 0.6, seed: 33 });
+    handText(text, cx, cy + 10, { size: o.size || 30, color: o.color || COL.red, align: "center", weight: "bold", seed: 71 });
+    ctx.restore();
+  }
+
+  function drawAnnotations(t) {
+    // ② 同じコミットを指していることを強調
+    if (t >= 7.7 && t < 12) {
+      const a = clamp((t - 7.7) / 0.4) * (0.55 + 0.25 * Math.sin(t * 5));
+      ctx.save(); ctx.globalAlpha = a;
+      strokeWobble(circlePts(P.C[0], P.C[1], 40 + Math.sin(t * 5) * 2, 51, 2, 0.5), { color: COL.red, width: 2.6, amp: 1, seed: 52 });
+      ctx.restore();
+    }
+    if (t >= 8.5 && t < 12) drawBubble(150, 266, 130, 44, [238, 326], "コピーではない！", 8.5, t, { size: 26 });
+
+    // ④ main は動かない
+    if (t >= 21.4 && t < 23.4) {
+      ctx.save(); ctx.globalAlpha = clamp((t - 21.4) / 0.4);
+      handText("← main は C のまま", 357, 508, { size: 22, color: COL.sub, seed: 81 });
+      ctx.restore();
+    }
+
+    // ⑥ 親が2つ
+    if (t >= 32.6 && t < 35) {
+      const a = clamp((t - 32.6) / 0.4);
+      ctx.save(); ctx.globalAlpha = a;
+      handText("親が2つ！（E と F）", 770, 330, { size: 25, color: COL.red, align: "center", weight: "bold", seed: 91 });
+      drawArrow(738, 346, 684, 400, { color: COL.red, width: 2.6, head: 12, amp: 1, seed: 92, progress: easeOut(a * 1.2) });
+      ctx.restore();
+    }
+
+    // ⑦ ぺりっ
+    if (t >= 36.6 && t < 37.9) {
+      const a = Math.sin(clamp((t - 36.6) / 1.3) * Math.PI);
+      ctx.save(); ctx.globalAlpha = a;
+      ctx.translate(610, 150); ctx.rotate(0.15);
+      handText("ぺりっ", 0, 0, { size: 28, color: COL.sub, weight: "bold", seed: 95 });
+      ctx.restore();
+    }
+    // ⑦ 履歴は残る
+    if (t >= 38.2) {
+      const a = clamp((t - 38.2) / 0.4);
+      ctx.save(); ctx.globalAlpha = a;
+      const tw = handText("線（履歴）は残る！", 465, 192, { size: 30, color: COL.featD, align: "center", weight: "bold", seed: 97 });
+      strokeWobble([[465 - tw / 2, 204], [465 + tw / 2, 202]], { color: COL.feat, width: 3, amp: 1.2, seed: 98, progress: easeOut(clamp((t - 38.4) / 0.5)) });
+      ctx.restore();
+    }
+  }
+
+  function drawSummary(t) {
+    if (t < 39.6) return;
+    const k = clamp((t - 39.6) / 0.5);
+    ctx.save();
+    ctx.globalAlpha = k;
+    ctx.translate(168, 250); ctx.rotate(-0.025); ctx.scale(0.9 + 0.1 * easeOutBack(k), 0.9 + 0.1 * easeOutBack(k));
+    const c = rectCorners(330, 74, 400);
+    fillPoly(c, "#fff8c9");
+    strokeWobble(rectOutline(c), { color: "#c9b54a", width: 2.2, amp: 0.8, seed: 401 });
+    handText("ブランチ ＝ コミットに貼る付箋", -150, -8, { size: 19, weight: "bold", seed: 402, jit: 0.6 });
+    handText("コミット ＝ 差分の履歴（消えない）", -150, 22, { size: 19, weight: "bold", seed: 403, jit: 0.6 });
+    ctx.restore();
+  }
+
+  function drawHistoryGlow(t) {
+    if (t < 38.0) return;
+    const a = clamp((t - 38.0) / 0.4) * (0.2 + 0.08 * Math.sin(t * 4));
+    ctx.save(); ctx.globalAlpha = a;
+    const opts = { color: COL.feat, width: 28, passes: 1, amp: 0.5, seed: 120 };
+    strokeWobble(bezierPts(P.C, P.D), opts);
+    strokeWobble([P.D, P.E], opts);
+    strokeWobble(bezierPts(P.E, P.G), opts);
+    ctx.restore();
+  }
+
+  // ブランチ名を色付けしながらコマンドを描く
+  function cmdText(str, n, x, y, seed) {
+    const parts = str.split(/(\s+)/);
+    let used = 0, cx = x;
+    for (const part of parts) {
+      if (used >= n) break;
+      const shown = part.slice(0, n - used);
+      used += part.length;
+      if (!shown) continue;
+      const color = part === "main" ? COL.main : part === "feature" ? COL.feat : COL.ink;
+      cx += handText(shown, cx, y, { size: 32, color, font: CODE, seed: seed + used, weight: color === COL.ink ? "normal" : "bold" });
+    }
+    return cx - x;
+  }
+
+  function drawCommand(t, si) {
+    const bx = 640, by = 656, bw = 1180, bh = 82;
+    ctx.save(); ctx.translate(bx, by);
+    const c = rectCorners(bw, bh, 140);
+    fillPoly(c, "#f3f1ea");
+    strokeWobble(rectOutline(c), { color: "#8f8a7f", width: 2.2, amp: 1, seed: 141 });
+    ctx.restore();
+    // ラベル
+    const label = "実行したコマンド";
+    const lw = textWidth(label, 17);
+    ctx.fillStyle = COL.board; ctx.fillRect(74, by - bh / 2 - 12, lw + 16, 22);
+    handText(label, 82, by - bh / 2 + 5, { size: 17, color: COL.sub, seed: 142, jit: 0.5 });
+
+    handText("$", 82, 668, { size: 32, color: "#a19c90", font: CODE, seed: 143 });
+    let x = 118, typing = false;
+    let output = null;
+    let note = null;
+    CMDS[si].forEach(([t0, str, out, nt], idx) => {
+      if (t < t0) return;
+      output = null;
+      if (nt) { note = { text: nt, a: clamp((t - t0) / 0.4) }; return; }
+      if (idx > 0) x += handText("→", x + 16, 666, { size: 26, color: "#a39e93", font: CODE, seed: 150 + idx }) + 32;
+      const n = Math.min(str.length, Math.floor((t - t0) * TYPE_SPEED) + 1);
+      x += cmdText(str, n, x, 668, idx * 13);
+      typing = n < str.length;
+      const tOut = t0 + str.length / TYPE_SPEED + 0.25; // 打ち終わってから出力
+      if (out && t >= tOut) output = { text: out, a: clamp((t - tOut) / 0.3) };
+    });
+    if (note) {
+      ctx.save(); ctx.globalAlpha = note.a;
+      handText(note.text, 120, 667, { size: 24, color: "#7d786d", seed: 171 });
+      ctx.restore();
+    } else if (output) {
+      ctx.save(); ctx.globalAlpha = output.a;
+      handText(output.text, x + 40, 667, { size: 23, color: "#7d786d", font: CODE, seed: 170 });
+      ctx.restore();
+    } else if (typing || Math.floor(t * 2.4) % 2 === 0) {
+      ctx.fillStyle = "rgba(43,43,43,0.75)";
+      ctx.fillRect(x + 5, 641, 3, 32);
+    }
+  }
+
+  function lineState(id, t, show) {
+    for (const [a, b] of show[id]) {
+      if (t >= a && t < b) {
+        const d = t - a;
+        return { v: easeOut(d / 0.4), add: d < 2.0 ? 1 : 1 - clamp((d - 2.0) / 0.6), del: 0 };
+      }
+      if (t >= b && t < b + 0.8) { // 赤く光ってから折りたたまれて消える
+        const k = (t - b) / 0.8;
+        return { v: 1 - easeInOut(clamp((k - 0.45) / 0.55)), add: 0, del: 1 };
+      }
+    }
+    return { v: 0, add: 0, del: 0 };
+  }
+
+  function drawCodeText(str, x, y) {
+    let cx = x;
+    str.split(/(<[^>]+>)/).forEach((part, i) => {
+      if (!part) return;
+      const isTag = part.startsWith("<");
+      cx += handText(part, cx, y, { size: 14, color: isTag ? "#7b7468" : COL.ink, font: CODE, jit: 0.35, seed: 300 + i * 7 + x });
+    });
+    return cx - x;
+  }
+
+  const PANEL = { x0: 905, y0: 158, w: 352, h: 414 };
+  function paperPanel() {
+    const { x0, y0, w, h } = PANEL;
+    ctx.save();
+    ctx.translate(x0 + w / 2, y0 + h / 2);
+    const c = rectCorners(w, h, 200);
+    fillPoly(c.map(([a, b]) => [a + 3, b + 5]), "rgba(0,0,0,0.06)");
+    fillPoly(c, COL.paper);
+    strokeWobble(rectOutline(c), { color: "#8f8a7f", width: 2.2, amp: 1, seed: 201 });
+    ctx.restore();
+  }
+  function panelLabel(t, labels) {
+    const { x0, y0, w, h } = PANEL;
+    let cur = null;
+    for (const L of labels) if (t >= L[0]) cur = L;
+    if (!cur) return;
+    ctx.save(); ctx.globalAlpha *= clamp((t - cur[0]) / 0.3);
+    handText(cur[1], x0 + w / 2, y0 + h - 15, { size: 17, color: cur[2] ? "#2e7d32" : COL.sub, weight: "bold", align: "center", seed: 290 });
+    ctx.restore();
+  }
+
+  function drawCodePanel(t, cfg) {
+    const { x0, y0, w, h } = PANEL;
+    paperPanel();
+
+    // ヘッダー：ファイル名と、いま HEAD が指しているブランチ
+    handText("index.html", x0 + 16, y0 + 31, { size: 19, font: CODE, weight: "bold", seed: 202 });
+    strokeWobble([[x0 + 8, y0 + 45], [x0 + w - 8, y0 + 46]], { color: "#bdb8ac", width: 1.6, amp: 0.6, passes: 1, seed: 203 });
+    if (t >= cfg.headFrom) {
+      const onFeat = cfg.onFeat(t);
+      const name = onFeat ? "feature" : "main";
+      const col = onFeat ? COL.feat : COL.main, light = onFeat ? COL.featL : COL.mainL, dark = onFeat ? COL.featD : COL.mainD;
+      const nw = textWidth(name, 16, CODE, "bold") + 16;
+      const nx = x0 + w - 14 - nw / 2, ny = y0 + 25;
+      ctx.save(); ctx.globalAlpha *= clamp((t - cfg.headFrom) / 0.4);
+      ctx.save(); ctx.translate(nx, ny);
+      const pc = rectCorners(nw, 26, 210);
+      fillPoly(pc, light);
+      strokeWobble(rectOutline(pc), { color: col, width: 1.8, amp: 0.5, seed: 211 });
+      ctx.restore();
+      handText(name, nx, ny + 6, { size: 16, color: dark, font: CODE, weight: "bold", align: "center", seed: 212 });
+      handText("HEAD →", nx - nw / 2 - 8, ny + 6, { size: 15, color: COL.sub, font: CODE, weight: "bold", align: "right", seed: 213 });
+      ctx.restore();
+    }
+
+    // 本文（左端のマーク＝その行を追加したコミット）
+    const lh = 23;
+    let y = y0 + 72, any = false;
+    cfg.lines.forEach(([id, str], i) => {
+      const s = lineState(id, t, cfg.show);
+      if (s.v <= 0.001) return;
+      any = true;
+      ctx.save();
+      ctx.globalAlpha *= s.v;
+      const top = y - 16;
+      if (s.add > 0) {
+        ctx.fillStyle = `rgba(76,175,80,${0.22 * s.add})`;
+        ctx.fillRect(x0 + 7, top, w - 14, lh - 2);
+        ctx.save(); ctx.globalAlpha *= s.add;
+        handText("+", x0 + 11, y, { size: 16, color: "#2e7d32", font: CODE, weight: "bold", seed: 220 + i });
+        ctx.restore();
+      }
+      if (s.del > 0) {
+        ctx.fillStyle = "rgba(214,69,61,0.2)";
+        ctx.fillRect(x0 + 7, top, w - 14, lh - 2);
+        handText("−", x0 + 11, y, { size: 16, color: COL.red, font: CODE, weight: "bold", seed: 230 + i });
+      }
+      const isF = FEAT_COMMITS.has(id);
+      ctx.save(); ctx.translate(x0 + 35, y - 5);
+      fillPoly(circlePts(0, 0, 9, 240 + i, 0.5, 0), isF ? COL.featL : COL.mainL);
+      strokeWobble(circlePts(0, 0, 9, 240 + i, 0.5, 0.3), { color: isF ? COL.feat : COL.main, width: 1.8, amp: 0.3, passes: 1, seed: 250 + i });
+      handText(id, 0, 4.5, { size: 12, color: isF ? COL.featD : COL.mainD, font: CODE, weight: "bold", align: "center", seed: 260 + i, jit: 0.3 });
+      ctx.restore();
+      const tw = drawCodeText(str, x0 + 52, y);
+      if (s.del > 0) strokeWobble([[x0 + 50, y - 5], [x0 + 54 + tw, y - 6]], { color: COL.red, width: 1.8, amp: 0.6, passes: 1, seed: 270 + i });
+      ctx.restore();
+      y += lh * s.v;
+    });
+    if (!any) handText("（まだ空っぽ）", x0 + w / 2, y0 + 130, { size: 18, color: COL.sub, align: "center", seed: 280 });
+
+    // 下部のひとこと
+    panelLabel(t, cfg.labels);
+  }
+  const CFG1 = { lines: CODE_LINES, show: SHOW, labels: DIFF_LABELS, onFeat: t => headK(t) >= 0.5, headFrom: 1.4 };
+
+  // =====================================================================
+  //  第2部：リモート（clone / push / PR / merge / pull）
+  //  上段＝GitHub（リモート）、下段＝自分の PC（ローカル）
+  // =====================================================================
+  const P2START = 45;
+  const LS = 0.7, OX = 50;                         // レーン内の縮尺と左端
+  const LANE_Y = { remote: 296, local: 526 };      // 各レーンの main の高さ
+  const LANE_BOX = { remote: [30, 146, 872, 364], local: [30, 376, 872, 596] };
+  const PX = { A: [70, 0], B: [200, 0], C: [330, 0], D: [490, -100], E: [650, -100], M: [840, 0] };
+  const BR2 = { A: "main", B: "main", C: "main", D: "feat", E: "feat", M: "main" };
+  const lp = (lane, id) => [OX + PX[id][0] * LS, LANE_Y[lane] + PX[id][1] * LS];
+
+  // [id, 出現時刻]
+  const R_COMMITS = [["A", 48.6], ["B", 48.8], ["C", 49.0], ["D", 76.8], ["E", 77.4], ["M", 106.4]];
+  const L_COMMITS = [["A", 53.8], ["B", 54.0], ["C", 54.2], ["D", 64.3], ["E", 66.3], ["M", 121.0]];
+  // [from, to, 描き始め, 描き終わり]
+  const R_EDGES = [["A", "B", 48.65, 48.8], ["B", "C", 48.85, 49.0], ["C", "D", 76.4, 76.8], ["D", "E", 77.0, 77.4], ["E", "M", 105.6, 106.4], ["C", "M", 105.6, 106.4]];
+  const L_EDGES = [["A", "B", 53.85, 54.0], ["B", "C", 54.05, 54.2], ["C", "D", 63.9, 64.3], ["D", "E", 65.9, 66.3], ["E", "M", 120.5, 121.0], ["C", "M", 120.5, 121.0]];
+  // 付箋の位置の変化 [時刻, 指すコミット]
+  const NOTES2 = [
+    { lane: "remote", br: "main", kf: [[49.2, "C"], [106.5, "M"]] },
+    { lane: "remote", br: "feat", kf: [[77.8, "E"]] },
+    { lane: "local",  br: "main", kf: [[54.4, "C"], [121.1, "M"]] },
+    { lane: "local",  br: "feat", kf: [[61.6, "C"], [64.4, "D"], [66.4, "E"]] }
+  ];
+  // レーン間を飛ぶコミット [id, from, to, 出発, 到着]
+  const FLIGHTS = [
+    ["A", "remote", "local", 53.0, 53.8], ["B", "remote", "local", 53.2, 54.0], ["C", "remote", "local", 53.4, 54.2],
+    ["D", "local", "remote", 75.8, 76.8], ["E", "local", "remote", 76.4, 77.4],
+    ["M", "remote", "local", 119.7, 120.7]
+  ];
+  // レーンの間に出す操作名 [表示, 開始, 終了]
+  const OPS = [["↓ clone", 52.8, 54.6], ["↑ push", 75.6, 77.8], ["↓ pull", 119.3, 121.3]];
+
+  function headK2(t) { // ローカルの HEAD：0 = main, 1 = feature
+    if (t < 62.0) return 0;
+    if (t < 62.8) return easeInOut((t - 62.0) / 0.8);
+    if (t < 117.3) return 1;
+    if (t < 118.0) return 1 - easeInOut((t - 117.3) / 0.7);
+    return 0;
+  }
+
+  // 右パネル（ローカルのファイル）
+  const CODE_LINES2 = CODE_LINES.filter(([id]) => id !== "F");
+  const SHOW2 = {
+    A: [[53.8, Infinity]], B: [[53.8, Infinity]], C: [[53.8, Infinity]],
+    D: [[64.3, 117.3], [121.0, Infinity]], E: [[66.3, 117.3], [121.0, Infinity]]
+  };
+  const CFG2 = {
+    lines: CODE_LINES2, show: SHOW2, headFrom: 54.8,
+    onFeat: t => t >= 62.4 && t < 117.3,
+    labels: [
+      [60.0, "自分の PC のファイル", false],
+      [64.3, "コミット D：+1行", true],
+      [66.3, "コミット E：+1行", true],
+      [116.0, "自分の PC のファイル（feature）", false],
+      [117.3, "main に戻ると D・E の行が消える", false],
+      [121.0, "pull で D・E の変更が届いた", true]
+    ]
+  };
+
+  function notePos2(n, t) {
+    const kf = n.kf;
+    if (t < kf[0][0]) return null;
+    let i = 0;
+    while (i + 1 < kf.length && t >= kf[i + 1][0]) i++;
+    let [x, y] = lp(n.lane, kf[i][1]);
+    const d = t - kf[i][0];
+    if (i > 0 && d < 0.5) {
+      const k = easeInOut(d / 0.5), [px, py] = lp(n.lane, kf[i - 1][1]);
+      x = lerp(px, x, k); y = lerp(py, y, k);
+    }
+    const off = (n.br === "main" ? 68 : -68) * LS;
+    return { x, y: y + off, cx: x, cy: y, a: clamp((t - kf[0][0]) / 0.4) };
+  }
+
+  function drawChapterCard(t) {
+    if (t >= 48.4) return;
+    const a = clamp((t - 45) / 0.5) * (1 - clamp((t - 47.9) / 0.5));
+    if (a <= 0) return;
+    ctx.save(); ctx.globalAlpha *= a;
+    const title = "第2部　チームで共有する";
+    const tw = textWidth(title, 56, HAND, "bold");
+    strokeWobble([[640 - tw / 2 - 6, 330], [640 + tw / 2 + 6, 326]], { color: "#ffe36b", width: 26, alpha: 0.8, passes: 1, amp: 1.5, seed: 500 });
+    handText(title, 640, 338, { size: 56, weight: "bold", align: "center", seed: 501 });
+    handText("push ・ pull ・ プルリクエスト（PR）", 640, 405, { size: 30, color: COL.sub, align: "center", seed: 502 });
+    ctx.restore();
+  }
+
+  function drawLaneBox(lane, t0, t) {
+    const a = clamp((t - t0) / 0.5);
+    if (a <= 0) return;
+    const [x1, y1, x2, y2] = LANE_BOX[lane];
+    ctx.save(); ctx.globalAlpha *= a;
+    ctx.translate((x1 + x2) / 2, (y1 + y2) / 2);
+    const c = rectCorners(x2 - x1, y2 - y1, lane === "remote" ? 510 : 520);
+    fillPoly(c, lane === "remote" ? "#edf2fa" : "#f5f1e8");
+    strokeWobble(rectOutline(c), { color: lane === "remote" ? "#8fa6c9" : "#b3a98f", width: 2.2, amp: 1, seed: lane === "remote" ? 511 : 521, progress: easeOut(a) });
+    ctx.restore();
+    ctx.save(); ctx.globalAlpha *= a;
+    const label = lane === "remote" ? "リモート（GitHub）" : "ローカル（自分の PC）";
+    const y = lane === "remote" ? 174 : 402;
+    const lw = handText(label, x1 + 16, y, { size: 18, weight: "bold", color: lane === "remote" ? "#3d5a8a" : "#6b5d3a", seed: lane === "remote" ? 512 : 522 });
+    strokeWobble([[x1 + 16, y + 7], [x1 + 16 + lw, y + 6]], { color: lane === "remote" ? "#8fa6c9" : "#c9b98f", width: 2, amp: 0.6, passes: 1, seed: 513 });
+    ctx.restore();
+  }
+
+  function drawEdge2(lane, [a, b, t0, t1], t) {
+    const k = clamp((t - t0) / (t1 - t0));
+    if (k <= 0) return;
+    const feat = BR2[a] === "feat" || BR2[b] === "feat";
+    strokeWobble(bezierPts(lp(lane, a), lp(lane, b)), {
+      color: feat ? COL.feat : COL.main, width: 5.5 * LS, progress: easeInOut(k), seed: t0 * 3, amp: 1.2
+    });
+  }
+  function drawCommit2(lane, [id, t0], t) {
+    const k = clamp((t - t0) / 0.35);
+    if (k <= 0) return;
+    const [x, y] = lp(lane, id);
+    commitAt(x, y, id, BR2[id], id === "M", LS * easeOutBack(k));
+  }
+  function drawNote2(n, t) {
+    const p = notePos2(n, t);
+    if (!p) return;
+    const col = n.br === "main" ? COL.main : COL.feat;
+    ctx.save(); ctx.globalAlpha *= p.a;
+    if (n.br === "main") drawArrow(p.x, p.y - 22 * LS, p.cx, p.cy + 28 * LS, { color: col, width: 2, head: 7, amp: 0.6, seed: 530 });
+    else drawArrow(p.x, p.y + 22 * LS, p.cx, p.cy - 28 * LS, { color: col, width: 2, head: 7, amp: 0.6, seed: 531 });
+    ctx.restore();
+    drawNote(p.x, p.y, n.br === "main" ? "main" : "feature", n.br, { rot: n.br === "main" ? -0.04 : 0.05, scale: LS * easeOutBack(p.a), alpha: p.a });
+  }
+  function drawHead2(t) {
+    if (t < 54.8) return;
+    const a = clamp((t - 54.8) / 0.4);
+    const m = notePos2(NOTES2[2], t), f = notePos2(NOTES2[3], t);
+    const k = headK2(t);
+    let x, y;
+    if (k <= 0 || !f) { x = m.x; y = m.y; }
+    else if (k >= 1) { x = f.x; y = f.y; }
+    else { x = lerp(m.x, f.x, k) + Math.sin(Math.PI * k) * 40; y = lerp(m.y, f.y, k); }
+    headAt(x, y, LS, a);
+  }
+
+  function drawFlights(t) {
+    FLIGHTS.forEach(([id, from, to, t0, t1], i) => {
+      if (t < t0 || t >= t1) return;
+      const k = easeInOut((t - t0) / (t1 - t0));
+      const [ax, ay] = lp(from, id), [bx, by] = lp(to, id);
+      const x = lerp(ax, bx, k) + Math.sin(k * Math.PI) * 22, y = lerp(ay, by, k);
+      ctx.save(); ctx.globalAlpha *= 0.55;
+      strokeWobble([[ax, ay], [x, y]], { color: BR2[id] === "feat" ? COL.feat : COL.main, width: 2.4, dash: [6, 8], passes: 1, amp: 0.8, seed: 540 + i });
+      ctx.restore();
+      commitAt(x, y, id, BR2[id], id === "M", LS * 1.08, 0.92);
+    });
+  }
+
+  function drawOps(t) {
+    OPS.forEach(([label, t0, t1], i) => {
+      if (t < t0 || t >= t1 + 0.6) return;
+      const a = clamp((t - t0) / 0.3) * (1 - clamp((t - t1) / 0.6));
+      const s = 0.85 + 0.15 * easeOutBack(clamp((t - t0) / 0.35));
+      ctx.save(); ctx.globalAlpha *= a;
+      ctx.translate(760, 369); ctx.scale(s, s);
+      const w = textWidth(label, 26, CODE, "bold") + 30;
+      const c = rectCorners(w, 40, 550 + i);
+      fillPoly(c, COL.paper);
+      strokeWobble(rectOutline(c), { color: COL.ink, width: 2.6, amp: 0.8, seed: 551 + i });
+      handText(label, 0, 9, { size: 26, font: CODE, weight: "bold", align: "center", seed: 552 + i });
+      ctx.restore();
+    });
+  }
+
+  function drawPR2(t) {
+    if (t < 89.5 || t >= 106.4) return;
+    const a = clamp((t - 89.5) / 0.4) * (1 - clamp((t - 105.4) / 0.5));
+    const [ex, ey] = lp("remote", "E"), [mx, my] = lp("remote", "M");
+    ctx.save(); ctx.globalAlpha *= a;
+    // まだ存在しない「マージ後」のコミット
+    strokeWobble(circlePts(mx, my, 25 * LS, 560, 0.6, 0.3), { color: COL.pr, width: 2.2, dash: [5, 6], passes: 1, amp: 0.4, seed: 561 });
+    handText("?", mx, my + 6, { size: 18, color: COL.pr, font: CODE, weight: "bold", align: "center", seed: 562 });
+    // PR の矢印
+    const pts = bezierPts([ex + 20 * LS, ey], [mx - 26 * LS, my], 24);
+    strokeWobble(pts, { color: COL.pr, width: 3, dash: [9, 7], passes: 1, amp: 0.8, seed: 563, progress: easeOut(clamp((t - 89.5) / 0.8)) });
+    if (t >= 90.3) {
+      const [px, py] = pts[pts.length - 2], [qx, qy] = pts[pts.length - 1];
+      const ang = Math.atan2(qy - py, qx - px);
+      strokeWobble([[qx - Math.cos(ang - 0.5) * 12, qy - Math.sin(ang - 0.5) * 12], [qx, qy], [qx - Math.cos(ang + 0.5) * 12, qy - Math.sin(ang + 0.5) * 12]],
+        { color: COL.pr, width: 3, passes: 1, amp: 0.4, seed: 564, step: 3 });
+    }
+    ctx.save(); ctx.globalAlpha *= clamp((t - 90.0) / 0.4);
+    handText("PR #1：feature → main", 560, 212, { size: 19, color: COL.pr, weight: "bold", seed: 565 });
+    ctx.restore();
+    ctx.restore();
+  }
+
+  function drawAnnotations2(t) {
+    const note = (t0, t1, text, x, y, o = {}) => {
+      if (t < t0 || t >= t1) return;
+      ctx.save(); ctx.globalAlpha *= clamp((t - t0) / 0.4);
+      handText(text, x, y, { size: 19, color: COL.sub, weight: "bold", seed: 570 + t0, ...o });
+      ctx.restore();
+    };
+    note(67.5, 74, "GitHub はまだ C のまま（届いていない）", 330, 246);
+    note(79.5, 88, "← みんなにも見える", 556, 186);
+    note(108.5, 116, "← 自分の PC の main はまだ C のまま", 330, 582);
+    note(122.0, 131, "自分の main も M まで進んだ →", 290, 582);
+  }
+
+  // ---------- 右パネル：GitHub の画面 ----------
+  function browserFrame(url) {
+    const { x0, y0, w } = PANEL;
+    paperPanel();
+    [0, 1, 2].forEach(i => {
+      ctx.save(); ctx.translate(x0 + 18 + i * 14, y0 + 23);
+      fillPoly(circlePts(0, 0, 4.5, 600 + i, 0.3, 0), ["#e8a49c", "#e8d39c", "#a9d3a0"][i]);
+      ctx.restore();
+    });
+    ctx.save(); ctx.translate(x0 + 60 + (w - 74) / 2, y0 + 23);
+    const c = rectCorners(w - 74, 24, 603);
+    fillPoly(c, "#f1efe8");
+    strokeWobble(rectOutline(c), { color: "#c2bdb1", width: 1.4, amp: 0.5, passes: 1, seed: 604 });
+    ctx.restore();
+    handText(url, x0 + 72, y0 + 28, { size: 13, color: COL.sub, font: CODE, seed: 605, jit: 0.3 });
+    strokeWobble([[x0 + 8, y0 + 45], [x0 + w - 8, y0 + 46]], { color: "#bdb8ac", width: 1.6, amp: 0.6, passes: 1, seed: 606 });
+  }
+  function pill(text, cx, cy, fill, stroke, color, seed, o = {}) {
+    const size = o.size || 15;
+    const w = textWidth(text, size, o.font || CODE, "bold") + 18, h = o.h || 24;
+    ctx.save(); ctx.translate(cx, cy);
+    if (o.scale) ctx.scale(o.scale, o.scale);
+    const c = rectCorners(w, h, seed);
+    fillPoly(c, fill);
+    strokeWobble(rectOutline(c), { color: stroke, width: 1.6, amp: 0.5, passes: 1, seed: seed + 1 });
+    handText(text, 0, size * 0.36, { size, color, font: o.font || CODE, weight: "bold", align: "center", seed: seed + 2, jit: 0.4 });
+    ctx.restore();
+    return w;
+  }
+  function docIcon(x, y) {
+    strokeWobble([[x, y - 8], [x + 7, y - 8], [x + 11, y - 4], [x + 11, y + 8], [x, y + 8], [x, y - 8]], { color: COL.sub, width: 1.4, amp: 0.3, passes: 1, seed: 610 + x });
+  }
+
+  function drawRepoPanel(t, si) {
+    const { x0, y0, w } = PANEL;
+    browserFrame("github.com/team/site");
+    handText("team / site", x0 + 16, y0 + 80, { size: 21, font: CODE, weight: "bold", seed: 620 });
+    // Code ボタン（clone 用 URL）
+    if (si === 7 && t >= 49.4) {
+      const a = clamp((t - 49.4) / 0.3);
+      ctx.save(); ctx.globalAlpha *= a;
+      pill("Code ▾", x0 + w - 52, y0 + 73, COL.ok, COL.ok, "#ffffff", 621, { h: 28 });
+      if (t < 56) {
+        ctx.save(); ctx.translate(x0 + w / 2 + 10, y0 + 238);
+        const c = rectCorners(w - 40, 64, 624);
+        fillPoly(c.map(([p, q]) => [p + 2, q + 3]), "rgba(0,0,0,0.07)");
+        fillPoly(c, "#ffffff");
+        strokeWobble(rectOutline(c), { color: COL.ok, width: 2, amp: 0.6, passes: 1, seed: 625 });
+        ctx.restore();
+        handText("clone 用の URL", x0 + 40, y0 + 228, { size: 14, color: COL.sub, weight: "bold", seed: 626 });
+        handText("https://github.com/team/site", x0 + 40, y0 + 253, { size: 14, font: CODE, seed: 627, jit: 0.3 });
+        strokeWobble([[x0 + w - 52, y0 + 90], [x0 + w - 70, y0 + 205]], { color: COL.ok, width: 1.6, amp: 0.6, passes: 1, seed: 628, dash: [4, 5] });
+      }
+      ctx.restore();
+    }
+    // ブランチ一覧
+    handText("ブランチ：", x0 + 16, y0 + 117, { size: 15, color: COL.sub, weight: "bold", seed: 630 });
+    let bx = x0 + 96;
+    const mw = textWidth("main", 15, CODE, "bold") + 18;
+    pill("main", bx + mw / 2, y0 + 111, COL.mainL, COL.main, COL.mainD, 631);
+    bx += mw + 10;
+    if (t >= 77.8) {
+      const fw = textWidth("feature", 15, CODE, "bold") + 18;
+      pill("feature", bx + fw / 2, y0 + 111, COL.featL, COL.feat, COL.featD, 634, { scale: easeOutBack(clamp((t - 77.8) / 0.4)) });
+    }
+    // ファイル一覧
+    ctx.save(); ctx.translate(x0 + w / 2, y0 + 170);
+    const fc = rectCorners(w - 28, 68, 640);
+    strokeWobble(rectOutline(fc), { color: "#c9c4b8", width: 1.6, amp: 0.6, passes: 1, seed: 641 });
+    ctx.restore();
+    docIcon(x0 + 28, y0 + 155);
+    handText("index.html", x0 + 48, y0 + 160, { size: 15, font: CODE, seed: 642 });
+    handText("main の最新：C", x0 + w - 24, y0 + 160, { size: 13, color: COL.sub, align: "right", seed: 643 });
+    docIcon(x0 + 28, y0 + 187);
+    handText("README.md", x0 + 48, y0 + 192, { size: 15, font: CODE, seed: 644 });
+    // push 後のお知らせ
+    if (si === 9 && t >= 78.3) {
+      const a = clamp((t - 78.3) / 0.4);
+      ctx.save(); ctx.globalAlpha *= a;
+      ctx.save(); ctx.translate(x0 + w / 2, y0 + 270);
+      const c = rectCorners(w - 28, 96, 650);
+      fillPoly(c, "#fff7d1");
+      strokeWobble(rectOutline(c), { color: "#d4b84a", width: 1.8, amp: 0.6, passes: 1, seed: 651 });
+      ctx.restore();
+      handText("feature に新しい push があります", x0 + 28, y0 + 254, { size: 15, weight: "bold", seed: 652 });
+      const pulse = t >= 80 ? 1 + 0.04 * Math.sin(t * 6) : 1;
+      pill("Compare & pull request", x0 + w / 2, y0 + 290, COL.ok, COL.ok, "#ffffff", 653, { h: 30, scale: pulse });
+      ctx.restore();
+    }
+    panelLabel(t, [[48.2, "GitHub 上の共有リポジトリ", false], [77.8, "feature ブランチが GitHub に届いた", true]]);
+  }
+
+  function drawPRPanel(t) {
+    const { x0, y0, w } = PANEL;
+    browserFrame("github.com/team/site/pull/1");
+    handText("Pull request #1", x0 + 16, y0 + 72, { size: 14, color: COL.sub, font: CODE, seed: 700 });
+    handText("自己紹介の文を追加", x0 + 16, y0 + 100, { size: 20, weight: "bold", seed: 701 });
+    // 状態と方向
+    const merged = t >= 105.3;
+    const sw = merged
+      ? pill("Merged", x0 + 16 + 40, y0 + 128, COL.pr, COL.pr, "#ffffff", 702, { scale: easeOutBack(clamp((t - 105.3) / 0.4)) })
+      : pill("Open", x0 + 16 + 30, y0 + 128, COL.ok, COL.ok, "#ffffff", 702);
+    let px = x0 + 16 + (merged ? 80 : 60) + 10;
+    const fw = textWidth("feature", 15, CODE, "bold") + 18;
+    pill("feature", px + fw / 2, y0 + 128, COL.featL, COL.feat, COL.featD, 705);
+    px += fw + 6;
+    handText("→", px + 4, y0 + 134, { size: 18, color: COL.sub, font: CODE, seed: 706 });
+    px += 28;
+    const mw = textWidth("main", 15, CODE, "bold") + 18;
+    pill("main", px + mw / 2, y0 + 128, COL.mainL, COL.main, COL.mainD, 707);
+    // 差分
+    if (t >= 90.5) {
+      const a = clamp((t - 90.5) / 0.4);
+      ctx.save(); ctx.globalAlpha *= a;
+      handText("Files changed", x0 + 16, y0 + 162, { size: 14, color: COL.sub, font: CODE, weight: "bold", seed: 710 });
+      handText("+2", x0 + 130, y0 + 162, { size: 15, color: "#2e7d32", font: CODE, weight: "bold", seed: 711 });
+      ctx.save(); ctx.translate(x0 + w / 2, y0 + 206);
+      const c = rectCorners(w - 28, 76, 712);
+      strokeWobble(rectOutline(c), { color: "#c9c4b8", width: 1.6, amp: 0.6, passes: 1, seed: 713 });
+      ctx.restore();
+      handText("index.html", x0 + 24, y0 + 186, { size: 13, font: CODE, weight: "bold", seed: 714 });
+      [["D", "  <p>私の名前はfeatureです。</p>"], ["E", "  <p>gitを勉強しています。</p>"]].forEach(([id, str], i) => {
+        const y = y0 + 210 + i * 22;
+        ctx.fillStyle = "rgba(76,175,80,0.2)";
+        ctx.fillRect(x0 + 18, y - 15, w - 36, 20);
+        handText("+", x0 + 22, y, { size: 14, color: "#2e7d32", font: CODE, weight: "bold", seed: 715 + i });
+        ctx.save(); ctx.translate(x0 + 42, y - 5);
+        fillPoly(circlePts(0, 0, 8, 716 + i, 0.4, 0), COL.featL);
+        strokeWobble(circlePts(0, 0, 8, 716 + i, 0.4, 0.3), { color: COL.feat, width: 1.6, amp: 0.3, passes: 1, seed: 717 + i });
+        handText(id, 0, 4, { size: 11, color: COL.featD, font: CODE, weight: "bold", align: "center", seed: 718 + i, jit: 0.3 });
+        ctx.restore();
+        drawCodeText(str, x0 + 54, y);
+      });
+      ctx.restore();
+    }
+    // レビュー
+    if (t >= 95.0) {
+      const a = clamp((t - 95.0) / 0.4);
+      ctx.save(); ctx.globalAlpha *= a;
+      ctx.save(); ctx.translate(x0 + 32, y0 + 272);
+      fillPoly(circlePts(0, 0, 14, 720, 0.6, 0), "#e7e2d6");
+      strokeWobble(circlePts(0, 0, 14, 720, 0.6, 0.3), { color: COL.sub, width: 1.6, amp: 0.4, passes: 1, seed: 721 });
+      handText("先", 0, 5, { size: 14, weight: "bold", align: "center", seed: 722 });
+      ctx.restore();
+      ctx.save(); ctx.translate(x0 + 58 + 110, y0 + 272);
+      const c = rectCorners(220, 32, 723);
+      fillPoly(c, "#ffffff");
+      strokeWobble(rectOutline(c), { color: "#c9c4b8", width: 1.6, amp: 0.5, passes: 1, seed: 724 });
+      ctx.restore();
+      handText("いいね！ わかりやすいです", x0 + 70, y0 + 278, { size: 15, seed: 725 });
+      if (t >= 96.5) {
+        ctx.save(); ctx.globalAlpha *= clamp((t - 96.5) / 0.3);
+        handText("✓ Approved（承認）", x0 + 58, y0 + 312, { size: 15, color: COL.ok, weight: "bold", seed: 726 });
+        ctx.restore();
+      }
+      ctx.restore();
+    }
+    // マージボタン
+    const bx = x0 + w / 2, by = y0 + 346;
+    if (merged) {
+      ctx.save(); ctx.globalAlpha *= clamp((t - 105.3) / 0.3);
+      pill("✓ main に取り込まれました", bx, by, COL.prL, COL.pr, COL.pr, 730, { h: 36, size: 16, font: HAND });
+      ctx.restore();
+    } else if (t >= 97.0) {
+      const press = t >= 105.0 ? 1 - 0.06 * Math.sin(clamp((t - 105.0) / 0.3) * Math.PI) : 1;
+      pill("Merge pull request", bx, by, COL.ok, COL.ok, "#ffffff", 731, { h: 36, size: 16, scale: press });
+    } else {
+      pill("レビュー待ち…", bx, by, "#eeece6", "#c2bdb1", COL.sub, 732, { h: 36, size: 16, font: HAND });
+    }
+    // クリックするカーソル
+    if (t >= 104.0 && t < 106.2) {
+      const k = easeInOut((t - 104.0) / 0.8);
+      const cx = lerp(x0 + w - 30, bx + 30, k), cy = lerp(y0 + 400, by + 6, k);
+      ctx.save(); ctx.globalAlpha *= 1 - clamp((t - 105.7) / 0.5);
+      ctx.translate(cx, cy);
+      fillPoly([[0, 0], [0, 22], [6, 16], [11, 26], [15, 24], [10, 14], [18, 14]], "#ffffff");
+      strokeWobble([[0, 0], [0, 22], [6, 16], [11, 26], [15, 24], [10, 14], [18, 14], [0, 0]], { color: COL.ink, width: 1.8, amp: 0.3, passes: 1, seed: 733, step: 3 });
+      ctx.restore();
+    }
+    panelLabel(t, [[88.0, "PR ＝ 取り込みのお願い＋レビューの場", false], [96.5, "レビュー OK（Approve）", true], [105.3, "GitHub 上で main にマージされた", true]]);
+  }
+
+  function drawSummaryPanel(t) {
+    const { x0, y0, w } = PANEL;
+    paperPanel();
+    handText("チーム開発の流れ", x0 + w / 2, y0 + 36, { size: 21, weight: "bold", align: "center", seed: 800 });
+    strokeWobble([[x0 + 8, y0 + 50], [x0 + w - 8, y0 + 51]], { color: "#bdb8ac", width: 1.6, amp: 0.6, passes: 1, seed: 801 });
+    const steps = [
+      ["switch -c でブランチを作る", COL.feat, COL.featL],
+      ["commit で差分を記録する", COL.feat, COL.featL],
+      ["push で GitHub に送る", COL.ink, "#eeece6"],
+      ["PR でレビューをお願いする", COL.pr, COL.prL],
+      ["GitHub 上でマージする", COL.pr, COL.prL],
+      ["pull で手元を最新にする", COL.main, COL.mainL]
+    ];
+    steps.forEach(([text, col, light], i) => {
+      const t0 = 131.8 + i * 1.3;
+      if (t < t0) return;
+      const a = clamp((t - t0) / 0.4);
+      const y = y0 + 88 + i * 50;
+      ctx.save(); ctx.globalAlpha *= a;
+      ctx.save(); ctx.translate(x0 + 32, y - 6); ctx.scale(easeOutBack(a), easeOutBack(a));
+      fillPoly(circlePts(0, 0, 14, 810 + i, 0.6, 0), light);
+      strokeWobble(circlePts(0, 0, 14, 810 + i, 0.6, 0.3), { color: col, width: 2.2, amp: 0.4, passes: 1, seed: 820 + i });
+      handText(String(i + 1), 0, 6, { size: 16, color: col, font: CODE, weight: "bold", align: "center", seed: 830 + i });
+      ctx.restore();
+      handText(text, x0 + 58, y, { size: 18, weight: "bold", seed: 840 + i, jit: 0.6 });
+      if (i < steps.length - 1) drawArrow(x0 + 32, y + 12, x0 + 32, y + 30, { color: "#a39e93", width: 1.8, head: 6, amp: 0.3, passes: 1, seed: 850 + i });
+      ctx.restore();
+    });
+    if (t >= 140.0) {
+      ctx.save(); ctx.globalAlpha *= clamp((t - 140.0) / 0.5);
+      handText("↺ 1 に戻ってくり返す", x0 + w / 2, y0 + 396, { size: 18, color: "#2e7d32", weight: "bold", align: "center", seed: 860 });
+      ctx.restore();
+    }
+  }
+
+  function renderPart2(t, si) {
+    drawChapterCard(t);
+    drawLaneBox("remote", 48.2, t);
+    drawLaneBox("local", 52.8, t);
+    R_EDGES.forEach(e => drawEdge2("remote", e, t));
+    L_EDGES.forEach(e => drawEdge2("local", e, t));
+    drawPR2(t);
+    R_COMMITS.forEach(c => drawCommit2("remote", c, t));
+    L_COMMITS.forEach(c => drawCommit2("local", c, t));
+    NOTES2.forEach(n => drawNote2(n, t));
+    drawHead2(t);
+    drawFlights(t);
+    drawOps(t);
+    drawAnnotations2(t);
+    // 右パネル
+    if (t < 48.2) return;
+    ctx.save(); ctx.globalAlpha *= clamp((t - 48.2) / 0.5);
+    if (si === 7 || si === 9) drawRepoPanel(t, si);
+    else if (si === 8 || si === 12) drawCodePanel(t, CFG2);
+    else if (si === 10 || si === 11) drawPRPanel(t);
+    else drawSummaryPanel(t);
+    ctx.restore();
+  }
+
+  function render(t) {
+    BOIL = Math.floor(t * 7);
+    ctx.setTransform(RES, 0, 0, RES, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.drawImage(bg, 0, 0, W, H);
+    const si = sceneIndex(t);
+    drawHeader(t, si);
+    if (t >= P2START) { renderPart2(t, si); drawCommand(t, si); return; }
+    // 左 7 割：ブランチのグラフ
+    ctx.save();
+    ctx.translate(14, 15);
+    drawHistoryGlow(t);
+    EDGES.forEach(e => drawEdge(e, t));
+    COMMITS.forEach(c => drawCommit(c, t));
+    drawNotes(t);
+    drawHead(t);
+    drawAnnotations(t);
+    drawSummary(t);
+    ctx.restore();
+    // 右 3 割：作業中のファイル
+    drawCodePanel(t, CFG1);
+    drawCommand(t, si);
+  }
+
+  // ---------- 再生制御 ----------
+  let t = 0, playing = false, last = null, dirty = true;
+  const playBtn = document.getElementById("play");
+  const timeEl = document.getElementById("time");
+  const auto = document.getElementById("auto");
+  const speedSel = document.getElementById("speed");
+  const SPEEDS = [...speedSel.options].map(o => o.value);
+  function stepSpeed(d) {
+    const i = clamp(SPEEDS.indexOf(speedSel.value) + d, 0, SPEEDS.length - 1);
+    speedSel.value = SPEEDS[i];
+  }
+  speedSel.addEventListener("change", () => speedSel.blur());
+  const bar = document.getElementById("bar");
+
+  const segs = SCENES.map((s, i) => {
+    const el = document.createElement("div");
+    el.className = "seg" + (s.start === P2START ? " part2" : ""); el.tabIndex = 0;
+    el.style.flexGrow = String(s.end - s.start);
+    el.setAttribute("role", "button");
+    el.setAttribute("aria-label", `シーン${i + 1}：${s.title}`);
+    el.title = `${i + 1}. ${s.title}`;
+    el.innerHTML = `<div class="fill"></div><span>${i + 1}</span>`;
+    el.addEventListener("click", ev => {
+      const r = el.getBoundingClientRect();
+      const frac = clamp((ev.clientX - r.left) / r.width);
+      seek(frac < 0.12 ? s.start : s.start + frac * (s.end - s.start));
+    });
+    el.addEventListener("keydown", ev => { if (ev.key === "Enter") { ev.preventDefault(); seek(s.start); } });
+    bar.appendChild(el);
+    return el;
+  });
+
+  function updateUI() {
+    playBtn.textContent = playing ? "⏸ 一時停止" : (t >= TOTAL - 0.01 ? "↺ 最初から" : "▶ 再生");
+    timeEl.textContent = `${fmtTime(t)} / ${fmtTime(TOTAL)}`;
+    const si = sceneIndex(t);
+    SCENES.forEach((s, i) => {
+      const k = clamp((t - s.start) / (s.end - s.start));
+      segs[i].firstChild.style.width = (k * 100) + "%";
+      segs[i].classList.toggle("now", i === si);
+    });
+  }
+  function fmtTime(v) { return `${Math.floor(v / 60)}:${String(Math.floor(v % 60)).padStart(2, "0")}`; }
+  function seek(v) { t = clamp(v, 0, TOTAL); dirty = true; }
+  function togglePlay() {
+    if (!playing && t >= TOTAL - 0.01) t = 0;
+    playing = !playing; last = null; dirty = true;
+  }
+  function next() {
+    const i = sceneIndex(t);
+    if (i < SCENES.length - 1) seek(SCENES[i + 1].start);
+  }
+  function prev() {
+    const i = sceneIndex(t);
+    if (t - SCENES[i].start > 1.0) seek(SCENES[i].start);
+    else seek(i > 0 ? SCENES[i - 1].start : 0);
+  }
+
+  playBtn.addEventListener("click", togglePlay);
+  document.getElementById("next").addEventListener("click", next);
+  document.getElementById("prev").addEventListener("click", prev);
+  window.addEventListener("keydown", ev => {
+    if (ev.key === " " || ev.code === "Space") { ev.preventDefault(); togglePlay(); }
+    else if (ev.key === "ArrowRight") { ev.preventDefault(); next(); }
+    else if (ev.key === "ArrowLeft") { ev.preventDefault(); prev(); }
+    else if (ev.key === "ArrowUp" && ev.target !== speedSel) { ev.preventDefault(); stepSpeed(1); }
+    else if (ev.key === "ArrowDown" && ev.target !== speedSel) { ev.preventDefault(); stepSpeed(-1); }
+  });
+
+  const fsBtn = document.getElementById("fs");
+  if (!document.fullscreenEnabled) fsBtn.hidden = true;
+  fsBtn.addEventListener("click", async () => {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await document.documentElement.requestFullscreen();
+    } catch (e) { fsBtn.hidden = true; }
+  });
+
+  function resize() {
+    const r = cv.getBoundingClientRect();
+    if (!r.width) return;
+    const next = clamp(r.width * (window.devicePixelRatio || 1) / W, 0.5, 3.5);
+    if (Math.abs(next - RES) < 0.01 && cv.width === Math.round(W * RES)) return;
+    RES = next;
+    cv.width = Math.round(W * RES); cv.height = Math.round(H * RES);
+    buildBackground();
+    dirty = true;
+  }
+  resize();
+  if (window.ResizeObserver) new ResizeObserver(resize).observe(cv);
+  window.addEventListener("resize", resize);
+  document.addEventListener("fullscreenchange", () => requestAnimationFrame(resize));
+
+  function frame(ts) {
+    if (playing) {
+      if (last == null) last = ts;
+      const dt = Math.min(0.1, (ts - last) / 1000);
+      last = ts;
+      let nt = t + dt * Number(speedSel.value);
+      if (auto.checked) {
+        for (const s of SCENES) {
+          const b = s.end - 0.001;
+          if (t < b && nt >= b) { nt = b; playing = false; break; }
+        }
+      }
+      if (nt >= TOTAL) { nt = TOTAL; playing = false; }
+      t = nt; dirty = true;
+    } else {
+      last = null;
+    }
+    if (dirty) { render(t); updateUI(); dirty = false; }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
