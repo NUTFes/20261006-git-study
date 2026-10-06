@@ -1,6 +1,10 @@
 # 事前準備：Git と GitHub
 
-この勉強会ではGitのコマンドを使います。Node.jsとDockerの準備は不要です。WindowsではGit Bash、WSLではUbuntuのターミナル、Macではターミナルを使ってください。コマンド内の名前とメールアドレスは自分のものに置き換えます。
+この勉強会ではGitのコマンドを使います。Node.jsとDockerの準備は不要です。
+WindowsではGit Bash、WSLではUbuntuのターミナル、Macではターミナルを使ってください。
+Gitの名前とメールアドレスはコミットに記録されるため、公開してよいものを設定します。
+すでに設定済みなら、表示を確認するだけで構いません。
+メールアドレスを公開したくない場合は、[GitHubのメール設定](https://docs.github.com/en/account-and-profile/how-tos/email-preferences/setting-your-commit-email-address)にある`noreply`アドレスを使えます。
 
 まずブラウザでGitHubにログインし、[教材リポジトリ](https://github.com/NUTFes/20261006-git-study)を開けるか確認してください。主催者が参加者に書き込み権限を付けます。招待が届いた場合は、勉強会までに承諾してください。
 
@@ -10,7 +14,7 @@
 
 ```bash
 git --version
-git config --global user.name "自分の名前"
+git config --global user.name "公開してよい表示名"
 git config --global user.email "GitHubで使うメールアドレス"
 git config --global user.name
 git config --global user.email
@@ -29,7 +33,7 @@ git --version
 # git が見つからない場合だけ実行
 sudo apt update
 sudo apt install git
-git config --global user.name "自分の名前"
+git config --global user.name "公開してよい表示名"
 git config --global user.email "GitHubで使うメールアドレス"
 git config --global user.name
 git config --global user.email
@@ -43,7 +47,7 @@ git config --global user.email
 
 ```bash
 git --version
-git config --global user.name "自分の名前"
+git config --global user.name "公開してよい表示名"
 git config --global user.email "GitHubで使うメールアドレス"
 git config --global user.name
 git config --global user.email
@@ -57,4 +61,4 @@ git config --global user.email
 - `git config --global user.name`と`git config --global user.email`に自分の設定が表示される。Gitの名前はGitHub IDと同じでなくても構いません。
 - GitHubにログインでき、教材リポジトリを開ける。招待が来ていれば承諾済み。
 
-メールアドレスを公開したくない場合は、[GitHubのメール設定](https://docs.github.com/en/account-and-profile/how-tos/email-preferences/setting-your-commit-email-address)にある`noreply`アドレスを使えます。作業を始めるコマンドは[README](../README.md#1-リポジトリを手元に用意する)にあります。
+作業を始めるコマンドは[README](../README.md#1-リポジトリを手元に用意する)にあります。
